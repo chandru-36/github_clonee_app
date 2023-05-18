@@ -1,9 +1,11 @@
 
+import 'dart:convert';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:github_sign_in_plus/github_sign_in_plus.dart';
-import 'package:github_sign_in_plus/github_sign_in_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
 
 import 'home.dart';
 
@@ -16,6 +18,8 @@ class Login extends StatefulWidget {
 }
 
 class _LoginState extends State<Login> {
+
+  bool load=false;
   final GitHubSignIn gitHubSignIn = GitHubSignIn(
     clientId: 'Iv1.fca09cd42a8ce389',
     clientSecret: '31130e4a5c47367f5fbc1057309fff0e689eec89',
@@ -29,14 +33,20 @@ class _LoginState extends State<Login> {
     super.initState();
   }
 
-  void _gitHubSignIn(BuildContext context) async {
-    var result = await gitHubSignIn.signIn(context);
-    switch (result.status) {
-      case GitHubSignInResultStatus.ok:
-        print(result);
-        print(result.token);
-        SharedPreferences prefs = await SharedPreferences.getInstance();
-        prefs.setString('access_token', result.token.toString());
+  set_owner_name(String? token) async {
+    String url = 'https://api.github.com/user';
+    final response = await http.get(Uri.parse(url), headers: {
+      'Accept': 'application/vnd.github+json',
+      'Authorization': 'Bearer $token',
+      'X-GitHub-Api-Version': '2022-11-28'
+    });
+    if(response.statusCode ==200){
+      var jsonData = jsonDecode(response.body);
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      prefs.setString('access_token', token!);
+      prefs.setString('login', jsonData['login']);
+      setState(() {
+        load=false;
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -45,6 +55,18 @@ class _LoginState extends State<Login> {
             },
           ),
         );
+      });
+    }
+  }
+
+  void _gitHubSignIn(BuildContext context) async {
+    var result = await gitHubSignIn.signIn(context);
+    switch (result.status) {
+      case GitHubSignInResultStatus.ok:
+        setState(() {
+          load=true;
+        });
+        set_owner_name(result.token);
         break;
 
       case GitHubSignInResultStatus.cancelled:
@@ -59,7 +81,6 @@ class _LoginState extends State<Login> {
     Size size =MediaQuery.of(context).size;
     return WillPopScope(
         onWillPop: () async {
-      print("tapped");
         return true;
     },
     child:Scaffold(
@@ -67,7 +88,7 @@ class _LoginState extends State<Login> {
       body: Container(
         color: Colors.white,
         padding: EdgeInsets.all(10),
-    child:  Column(
+    child:  load==false?Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
@@ -121,7 +142,21 @@ class _LoginState extends State<Login> {
           )
         ],
 
-      ))
+      ):Container(
+        height: size.height * 1,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(
+                height: 15,
+              ),
+            ],
+          ),)
+    ),
+      )
+
     )
     );
   }
